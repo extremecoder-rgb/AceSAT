@@ -30,12 +30,13 @@ interface NvidiaService {
     companion object {
         fun create(settingsManager: SettingsManager): NvidiaService {
             val apiKey = settingsManager.getApiKey()
+            val backendIp = settingsManager.getBackendIp() ?: "192.168.0.104"
             
             // If API key is present in settings, use NVIDIA direct URL. Otherwise, use proxy.
             val baseUrl = if (!apiKey.isNullOrBlank()) {
                 "https://integrate.api.nvidia.com/v1/"
             } else {
-                "http://10.180.70.162:3000/v1/"
+                "http://$backendIp:3000/v1/"
             }
 
             val logging = HttpLoggingInterceptor().apply {

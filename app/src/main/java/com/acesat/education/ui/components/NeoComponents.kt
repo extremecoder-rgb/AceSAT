@@ -22,6 +22,7 @@ fun NeobrutalistBox(
     borderWidth: Int = 2,
     shadowOffset: Int = 4,
     cornerRadius: Int = 12,
+    fillMaxWidth: Boolean = false,
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(modifier = modifier.padding(bottom = shadowOffset.dp, end = shadowOffset.dp)) {
@@ -32,8 +33,7 @@ fun NeobrutalistBox(
                 .background(shadowColor, shape = RoundedCornerShape(cornerRadius.dp))
         )
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
+            modifier = (if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
                 .background(backgroundColor, shape = RoundedCornerShape(cornerRadius.dp))
                 .border(borderWidth.dp, borderColor, shape = RoundedCornerShape(cornerRadius.dp))
                 .clip(RoundedCornerShape(cornerRadius.dp)),
@@ -55,7 +55,8 @@ fun NeobrutalistButton(
         modifier = modifier.clickable(enabled = enabled) { onClick() },
         backgroundColor = bg,
         cornerRadius = 10,
-        shadowOffset = 3
+        shadowOffset = 3,
+        fillMaxWidth = true
     ) {
         Row(
             modifier = Modifier

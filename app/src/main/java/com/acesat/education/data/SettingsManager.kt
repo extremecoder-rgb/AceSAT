@@ -13,4 +13,12 @@ class SettingsManager(context: Context) {
     fun setApiKey(key: String) {
         prefs.edit().putString("nvidia_api_key", key).apply()
     }
+
+    fun getBackendIp(): String? {
+        return prefs.getString("backend_ip", "192.168.0.104") // Dynamic default or previously discovered IP
+    }
+
+    fun setBackendIp(ip: String) {
+        prefs.edit().putString("backend_ip", ip).apply()
+    }
 }

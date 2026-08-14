@@ -11,10 +11,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.acesat.education.agent.AdaptiveAgent
+import com.acesat.education.data.BackendDiscovery
 import com.acesat.education.data.SettingsManager
 import com.acesat.education.data.api.NvidiaService
 import com.acesat.education.data.room.AppDatabase
 import com.acesat.education.data.room.Student
+import com.acesat.education.ui.components.SettingsDialog
 import com.acesat.education.ui.screens.*
 import com.acesat.education.ui.theme.AceSATTheme
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +35,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var database: AppDatabase
     private lateinit var settingsManager: SettingsManager
 
-    // Dynamically create agent based on whether an API key is provided
     private fun createAgent(): AdaptiveAgent {
         return AdaptiveAgent(database, NvidiaService.create(settingsManager))
     }
@@ -51,14 +52,26 @@ class MainActivity : ComponentActivity() {
                 ) {
                     var currentScreen by remember { mutableStateOf<Screen>(Screen.Onboarding) }
                     var student by remember { mutableStateOf<Student?>(null) }
+                    var isSettingsOpen by remember { mutableStateOf(false) }
                     val context = LocalContext.current
                     val scope = rememberCoroutineScope()
                     
-                    // Agent state initialized dynamically
                     var agent by remember { mutableStateOf(createAgent()) }
 
-                    // Fetch student on start
+                    // 1. Run network auto-discovery on startup to automatically locate local server!
                     LaunchedEffect(Unit) {
+                        scope.launch {
+                            val discoveredIp = BackendDiscovery.discoverServer(context)
+                            if (discoveredIp != null) {
+                                settingsManager.setBackendIp(discoveredIp)
+                                agent = createAgent() // Recreate agent with discovered IP
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, "Connected to backend server at: $discoveredIp", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+
+                        // Fetch student on start
                         launch {
                             database.studentDao().getStudent().collect {
                                 student = it
@@ -67,6 +80,20 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                    }
+
+                    if (isSettingsOpen) {
+                        SettingsDialog(
+                            settingsManager = settingsManager,
+                            onDismiss = { isSettingsOpen = false },
+                            onSave = { ip, key ->
+                                settingsManager.setBackendIp(ip.trim())
+                                settingsManager.setApiKey(key.trim())
+                                agent = createAgent() // Recreate with updated settings
+                                isSettingsOpen = false
+                                Toast.makeText(context, "Settings saved. Agent reloaded.", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
 
                     when (val screen = currentScreen) {
@@ -79,10 +106,7 @@ class MainActivity : ComponentActivity() {
                                         database.studentDao().insertStudent(newStudent)
                                     }
                                     student = newStudent.copy(id = id.toInt())
-                                    
-                                    // Re-create agent in case they entered an API key
                                     agent = createAgent()
-                                    
                                     currentScreen = Screen.Dashboard
                                 }
                             }
@@ -112,6 +136,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onStartDiagnostic = {
                                 currentScreen = Screen.DiagnosticQuiz
+                            },
+                            onOpenSettings = {
+                                isSettingsOpen = true
                             }
                         )
                         is Screen.Practice -> PracticeScreen(
