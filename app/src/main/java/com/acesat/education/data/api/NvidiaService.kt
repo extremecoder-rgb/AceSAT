@@ -6,12 +6,11 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import okhttp3.Interceptor
 import java.util.concurrent.TimeUnit
+import com.acesat.education.data.SettingsManager
 
-data class Message(
-    val role: String,
-    val content: String
-)
+data class Message(val role: String, val content: String)
 
 data class ChatRequest(
     val model: String = "nvidia/nemotron-3-super-120b-a12b",
@@ -21,28 +20,38 @@ data class ChatRequest(
     val max_tokens: Int = 8000
 )
 
-data class ChatResponse(
-    val choices: List<Choice>
-)
-
-data class Choice(
-    val message: Message
-)
+data class ChatResponse(val choices: List<Choice>)
+data class Choice(val message: Message)
 
 interface NvidiaService {
-    @POST("v1/chat/completions")
+    @POST("chat/completions")
     suspend fun getCompletions(@Body request: ChatRequest): ChatResponse
 
     companion object {
-        // Change this to your backend URL (local IP for phone, or deployed URL)
-        private const val BASE_URL = "http://10.180.70.162:3000/"
+        fun create(settingsManager: SettingsManager): NvidiaService {
+            val apiKey = settingsManager.getApiKey()
+            
+            // If API key is present in settings, use NVIDIA direct URL. Otherwise, use proxy.
+            val baseUrl = if (!apiKey.isNullOrBlank()) {
+                "https://integrate.api.nvidia.com/v1/"
+            } else {
+                "http://10.180.70.162:3000/v1/"
+            }
 
-        fun create(): NvidiaService {
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC
             }
 
+            val authInterceptor = Interceptor { chain ->
+                val requestBuilder = chain.request().newBuilder()
+                if (!apiKey.isNullOrBlank()) {
+                    requestBuilder.addHeader("Authorization", "Bearer $apiKey")
+                }
+                chain.proceed(requestBuilder.build())
+            }
+
             val client = OkHttpClient.Builder()
+                .addInterceptor(authInterceptor)
                 .addInterceptor(logging)
                 .connectTimeout(120, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
@@ -50,7 +59,7 @@ interface NvidiaService {
                 .build()
 
             return Retrofit.Builder()
-                .baseUrl(BASE_URL)
+                .baseUrl(baseUrl)
                 .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
