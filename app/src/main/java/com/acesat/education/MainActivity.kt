@@ -51,7 +51,6 @@ class MainActivity : ComponentActivity() {
                 ) {
                     var currentScreen by remember { mutableStateOf<Screen>(Screen.Onboarding) }
                     var student by remember { mutableStateOf<Student?>(null) }
-                    var isSettingsOpen by remember { mutableStateOf(false) }
                     val context = LocalContext.current
                     val scope = rememberCoroutineScope()
                     var agent by remember { mutableStateOf(createAgent()) }
@@ -90,20 +89,6 @@ class MainActivity : ComponentActivity() {
                                 // Ignore DB error on first launch
                             }
                         }
-                    }
-
-                    // Settings overlay
-                    if (isSettingsOpen) {
-                        SettingsDialog(
-                            settingsManager = settingsManager,
-                            onDismiss = { isSettingsOpen = false },
-                            onSave = { ip ->
-                                settingsManager.setBackendIp(ip)
-                                agent = createAgent()
-                                isSettingsOpen = false
-                                Toast.makeText(context, "Server IP updated to $ip", Toast.LENGTH_SHORT).show()
-                            }
-                        )
                     }
 
                     when (val screen = currentScreen) {
@@ -153,8 +138,7 @@ class MainActivity : ComponentActivity() {
                             database = database,
                             agent = agent,
                             onStartPractice = { cat, sec -> currentScreen = Screen.Practice(cat, sec) },
-                            onStartDiagnostic = { currentScreen = Screen.DiagnosticQuiz },
-                            onOpenSettings = { isSettingsOpen = true }
+                            onStartDiagnostic = { currentScreen = Screen.DiagnosticQuiz }
                         )
 
                         is Screen.Practice -> PracticeScreen(

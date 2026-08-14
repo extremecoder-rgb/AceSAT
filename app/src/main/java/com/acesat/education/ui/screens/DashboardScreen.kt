@@ -32,8 +32,7 @@ fun DashboardScreen(
     database: AppDatabase,
     agent: AdaptiveAgent,
     onStartPractice: (category: String?, section: String?) -> Unit,
-    onStartDiagnostic: () -> Unit,
-    onOpenSettings: () -> Unit
+    onStartDiagnostic: () -> Unit
 ) {
     var weakAreas by remember { mutableStateOf<List<WeakArea>>(emptyList()) }
     var studyPlans by remember { mutableStateOf<List<StudyPlan>>(emptyList()) }
@@ -52,7 +51,7 @@ fun DashboardScreen(
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        // Welcome Header & Settings button
+        // Welcome Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -86,26 +85,6 @@ fun DashboardScreen(
                         )
                     }
                 }
-            }
-            
-            Spacer(modifier = Modifier.width(8.dp))
-            
-            NeobrutalistBox(
-                modifier = Modifier
-                    .clickable { onOpenSettings() }
-                    .size(54.dp),
-                backgroundColor = CardWhite,
-                cornerRadius = 10,
-                shadowOffset = 2,
-                borderWidth = 2,
-                fillMaxWidth = false
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "Settings",
-                    tint = BorderBlack,
-                    modifier = Modifier.align(Alignment.Center)
-                )
             }
         }
 
