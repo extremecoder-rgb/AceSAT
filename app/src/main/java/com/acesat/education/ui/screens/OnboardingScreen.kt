@@ -11,7 +11,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.acesat.education.data.SettingsManager
 import com.acesat.education.ui.components.NeobrutalistBox
 import com.acesat.education.ui.components.NeobrutalistButton
 import com.acesat.education.ui.theme.*
@@ -19,12 +18,10 @@ import com.acesat.education.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
-    settingsManager: SettingsManager,
     onStart: (String, Int) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var targetScoreText by remember { mutableStateOf("1400") }
-    var apiKey by remember { mutableStateOf(settingsManager.getApiKey() ?: "") }
 
     Column(
         modifier = Modifier
@@ -35,21 +32,33 @@ fun OnboardingScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Header Card
         NeobrutalistBox(
             modifier = Modifier.fillMaxWidth(),
-            backgroundColor = PinkAccent
+            backgroundColor = PinkAccent,
+            fillMaxWidth = true
         ) {
-            Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    text = "AceSAT AI Tutor",
-                    fontSize = 28.sp,
+                    text = "AceSAT",
+                    fontSize = 40.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = BorderBlack
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Personalized SAT prep that adapts to you in real-time.",
-                    fontSize = 14.sp,
+                    text = "AI-POWERED SAT TUTOR",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                    color = BorderBlack
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Personalized practice. Real SAT questions. Adaptive learning powered by NVIDIA AI.",
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
                     color = BorderBlack
@@ -59,9 +68,18 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        NeobrutalistBox(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(20.dp)) {
-                Text("STUDENT NAME", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = BorderBlack)
+        NeobrutalistBox(
+            modifier = Modifier.fillMaxWidth(),
+            fillMaxWidth = true
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+                Text(
+                    "YOUR NAME",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.sp,
+                    color = BorderBlack
+                )
                 Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = name,
@@ -77,33 +95,20 @@ fun OnboardingScreen(
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
-                Text("TARGET SAT SCORE", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = BorderBlack)
+                Text(
+                    "TARGET SAT SCORE",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.sp,
+                    color = BorderBlack
+                )
                 Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = targetScoreText,
                     onValueChange = { targetScoreText = it },
                     placeholder = { Text("e.g. 1400", color = Color.Gray) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        focusedBorderColor = BorderBlack,
-                        unfocusedBorderColor = BorderBlack,
-                        focusedTextColor = BorderBlack,
-                        unfocusedTextColor = BorderBlack
-                    ),
-                    singleLine = true
-                )
-                
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Text("NVIDIA API KEY (Optional for proxy)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = BorderBlack)
-                Text("Paste your free NIM API key here to bypass network issues and connect directly.", fontSize = 10.sp, color = Color.DarkGray)
-                Spacer(modifier = Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it },
-                    placeholder = { Text("nvapi-...", color = Color.Gray) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
                         focusedBorderColor = BorderBlack,
@@ -122,13 +127,17 @@ fun OnboardingScreen(
             onClick = {
                 val target = targetScoreText.toIntOrNull() ?: 1200
                 if (name.isNotBlank()) {
-                    settingsManager.setApiKey(apiKey.trim())
-                    onStart(name, target)
+                    onStart(name.trim(), target)
                 }
             },
             backgroundColor = PurpleAccent
         ) {
-            Text("ENTER DASHBOARD", fontWeight = FontWeight.ExtraBold, color = CardWhite)
+            Text(
+                "ENTER DASHBOARD →",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 15.sp,
+                color = CardWhite
+            )
         }
     }
 }

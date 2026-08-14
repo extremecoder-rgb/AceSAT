@@ -1,77 +1,80 @@
 package com.acesat.education.data
 
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.LinkProperties
-import android.net.NetworkCapabilities
 import android.net.wifi.WifiManager
 import android.util.Log
 import kotlinx.coroutines.*
 import java.net.HttpURLConnection
-import java.net.InetAddress
 import java.net.URL
 
 object BackendDiscovery {
     private const val TAG = "BackendDiscovery"
+    private const val PORT = 3000
+    private const val TIMEOUT_MS = 300
 
     fun getLocalSubnet(context: Context): String? {
-        val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        val connectionInfo = wifiManager.connectionInfo
-        val ipAddress = connectionInfo.ipAddress
-        if (ipAddress == 0) return null
-        
-        val ipString = String.format(
-            "%d.%d.%d.",
-            ipAddress and 0xff,
-            ipAddress shr 8 and 0xff,
-            ipAddress shr 16 and 0xff
-        )
-        return ipString
+        return try {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            @Suppress("DEPRECATION")
+            val ipAddress = wifiManager.connectionInfo.ipAddress
+            if (ipAddress == 0) null
+            else String.format(
+                "%d.%d.%d.",
+                ipAddress and 0xff,
+                ipAddress shr 8 and 0xff,
+                ipAddress shr 16 and 0xff
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not get local subnet: ${e.message}")
+            null
+        }
     }
 
     suspend fun discoverServer(context: Context): String? = withContext(Dispatchers.IO) {
-        val subnet = getLocalSubnet(context) ?: "192.168.1."
-        Log.d(TAG, "Scanning subnet: $subnet")
-        
-        // Also check standard emulators localhost redirect (10.0.2.2)
-        val candidateIPs = mutableListOf("10.0.2.2")
-        for (i in 1..254) {
-            candidateIPs.add("$subnet$i")
-        }
+        return@withContext try {
+            val subnet = getLocalSubnet(context)
+            if (subnet == null) {
+                Log.w(TAG, "Could not determine subnet, skipping auto-discovery")
+                return@withContext null
+            }
 
-        val deferredResults = candidateIPs.map { ip ->
-            async {
-                val urlString = "http://$ip:3000/health"
-                try {
-                    val url = URL(urlString)
-                    val conn = url.openConnection() as HttpURLConnection
-                    conn.connectTimeout = 250 // Fast connection timeout
-                    conn.readTimeout = 250
-                    conn.requestMethod = "GET"
-                    val responseCode = conn.responseCode
-                    if (responseCode == 200) {
-                        val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-                        if (responseText.contains("status") && responseText.contains("OK")) {
-                            Log.d(TAG, "Found active server at: $ip")
-                            return@async ip
-                        }
+            Log.d(TAG, "Scanning subnet: $subnet")
+
+            // Collect all candidate IPs
+            val candidates = mutableListOf<String>()
+            for (i in 1..254) { candidates.add("$subnet$i") }
+
+            // Parallel scan all IPs with a short timeout
+            val found = coroutineScope {
+                candidates.map { ip ->
+                    async {
+                        if (pingServer(ip)) ip else null
                     }
-                } catch (e: Exception) {
-                    // Ignore failures
-                }
-                null
+                }.awaitAll().firstOrNull { it != null }
             }
-        }
 
-        // Wait for first non-null result, or complete with null
-        for (deferred in deferredResults) {
-            val res = deferred.await()
-            if (res != null) {
-                // Cancel all other active scan jobs
-                deferredResults.forEach { it.cancel() }
-                return@withContext res
-            }
+            if (found != null) Log.d(TAG, "Discovered server at: $found")
+            else Log.w(TAG, "No server found on subnet $subnet")
+
+            found
+        } catch (e: Exception) {
+            Log.e(TAG, "Discovery failed: ${e.message}")
+            null
         }
-        null
+    }
+
+    private fun pingServer(ip: String): Boolean {
+        return try {
+            val url = URL("http://$ip:$PORT/health")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.connectTimeout = TIMEOUT_MS
+            conn.readTimeout = TIMEOUT_MS
+            conn.requestMethod = "GET"
+            val code = conn.responseCode
+            conn.disconnect()
+            code == 200
+        } catch (e: Exception) {
+            false
+        }
     }
 }

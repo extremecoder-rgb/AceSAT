@@ -6,7 +6,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
-import okhttp3.Interceptor
 import java.util.concurrent.TimeUnit
 import com.acesat.education.data.SettingsManager
 
@@ -24,35 +23,22 @@ data class ChatResponse(val choices: List<Choice>)
 data class Choice(val message: Message)
 
 interface NvidiaService {
-    @POST("chat/completions")
+    @POST("v1/chat/completions")
     suspend fun getCompletions(@Body request: ChatRequest): ChatResponse
 
     companion object {
         fun create(settingsManager: SettingsManager): NvidiaService {
-            val apiKey = settingsManager.getApiKey()
+            // Always route through the backend proxy server.
+            // The backend holds the NVIDIA API key securely in its .env file.
+            // The phone just talks to the backend over local Wi-Fi.
             val backendIp = settingsManager.getBackendIp() ?: "192.168.0.104"
-            
-            // If API key is present in settings, use NVIDIA direct URL. Otherwise, use proxy.
-            val baseUrl = if (!apiKey.isNullOrBlank()) {
-                "https://integrate.api.nvidia.com/v1/"
-            } else {
-                "http://$backendIp:3000/v1/"
-            }
+            val baseUrl = "http://$backendIp:3000/"
 
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC
             }
 
-            val authInterceptor = Interceptor { chain ->
-                val requestBuilder = chain.request().newBuilder()
-                if (!apiKey.isNullOrBlank()) {
-                    requestBuilder.addHeader("Authorization", "Bearer $apiKey")
-                }
-                chain.proceed(requestBuilder.build())
-            }
-
             val client = OkHttpClient.Builder()
-                .addInterceptor(authInterceptor)
                 .addInterceptor(logging)
                 .connectTimeout(120, TimeUnit.SECONDS)
                 .readTimeout(120, TimeUnit.SECONDS)
