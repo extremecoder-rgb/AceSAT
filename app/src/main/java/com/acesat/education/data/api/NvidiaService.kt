@@ -34,7 +34,7 @@ interface NvidiaService {
     suspend fun getCompletions(@Body request: ChatRequest): ChatResponse
 
     companion object {
-        private const val BASE_URL = "http://10.0.2.2:3000/" // Android Emulator maps localhost to 10.0.2.2
+        private const val BASE_URL = "http://10.180.70.162:3000/" // Local Wi-Fi IP for physical device testing
 
         fun create(): NvidiaService {
             val logging = HttpLoggingInterceptor().apply {
