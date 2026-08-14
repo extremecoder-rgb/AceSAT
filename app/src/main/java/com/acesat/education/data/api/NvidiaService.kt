@@ -12,7 +12,7 @@ import com.acesat.education.data.SettingsManager
 data class Message(val role: String, val content: String)
 
 data class ChatRequest(
-    val model: String = "nvidia/nemotron-3-super-120b-a12b",
+    val model: String = "meta/llama-3.1-70b-instruct",
     val messages: List<Message>,
     val temperature: Double = 0.8,
     val top_p: Double = 0.95,

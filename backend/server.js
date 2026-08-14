@@ -41,11 +41,11 @@ app.post('/v1/chat/completions', async (req, res) => {
   const { model, messages, temperature, top_p, max_tokens } = req.body;
 
   try {
-    console.log(`Calling NVIDIA NIM (Model: ${model || 'nemotron-3-super-120b-a12b'})...`);
+    console.log(`Calling NVIDIA NIM (Model: ${model || 'meta/llama-3.1-70b-instruct'})...`);
     console.log(`Messages count: ${messages?.length || 0}`);
 
     const response = await client.chat.completions.create({
-      model: model || 'nvidia/nemotron-3-super-120b-a12b',
+      model: model || 'meta/llama-3.1-70b-instruct',
       messages: messages,
       temperature: temperature !== undefined ? temperature : 0.8,
       top_p: top_p !== undefined ? top_p : 0.95,
