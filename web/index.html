@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AceSAT Education AI-Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- Onboarding Screen -->
+    <div id="screen-onboarding" class="screen active">
+      <div class="neobrutalist-card header-card pink-bg">
+        <h1>AceSAT AI Tutor</h1>
+        <p>Personalized, adaptive SAT preparation designed to help you excel.</p>
+      </div>
+
+      <div class="neobrutalist-card input-card">
+        <div class="input-group">
+          <label for="student-name">STUDENT NAME</label>
+          <input type="text" id="student-name" placeholder="Enter your name" required>
+        </div>
+        <div class="input-group">
+          <label for="target-score">TARGET SAT SCORE</label>
+          <input type="number" id="target-score" value="1400" min="400" max="1600" required>
+        </div>
+      </div>
+
+      <button id="btn-start-diagnostic" class="neobrutalist-btn purple-bg">
+        START DIAGNOSTIC QUIZ
+      </button>
+    </div>
+
+    <!-- Diagnostic Quiz Screen -->
+    <div id="screen-diagnostic" class="screen">
+      <div class="quiz-header">
+        <h2 id="diagnostic-progress">Diagnostic Quiz (1/3)</h2>
+      </div>
+
+      <div class="neobrutalist-card question-card">
+        <span id="diagnostic-section" class="category-badge teal-bg">MATH</span>
+        <p id="diagnostic-question-text" class="question-text">Loading question...</p>
+        
+        <div id="diagnostic-options" class="options-container">
+          <!-- Options rendered dynamically -->
+        </div>
+      </div>
+
+      <button id="btn-diagnostic-next" class="neobrutalist-btn teal-bg disabled" disabled>
+        NEXT QUESTION
+      </button>
+    </div>
+
+    <!-- Dashboard Screen -->
+    <div id="screen-dashboard" class="screen">
+      <!-- Welcome Header -->
+      <div class="neobrutalist-card header-card pink-bg flex-header">
+        <div>
+          <span class="sub-label">WELCOME BACK,</span>
+          <h2 id="dash-student-name" class="student-name-title">Student</h2>
+        </div>
+        <div class="neobrutalist-badge score-badge">
+          <span id="dash-total-score">1000</span>
+        </div>
+      </div>
+
+      <!-- Score breakdown -->
+      <div class="grid-scores">
+        <div class="neobrutalist-card score-card">
+          <span class="section-label purple-text">MATH</span>
+          <h3 id="dash-math-score" class="score-val">500/800</h3>
+        </div>
+        <div class="neobrutalist-card score-card">
+          <span class="section-label teal-text">READING & WRITING</span>
+          <h3 id="dash-rw-score" class="score-val">500/800</h3>
+        </div>
+      </div>
+
+      <!-- Action Button -->
+      <button id="btn-goto-practice" class="neobrutalist-btn purple-bg action-btn">
+        <span class="play-icon">▶</span> START ADAPTIVE PRACTICE
+      </button>
+
+      <!-- Weak Areas & Proficiency -->
+      <div class="section-container">
+        <h3>WEAK AREAS & PROFICIENCY</h3>
+        <div id="weak-areas-list" class="list-container">
+          <!-- Dynamic weak areas -->
+        </div>
+      </div>
+
+      <!-- Personalized Study Plan -->
+      <div class="section-container">
+        <h3>AI PERSONALIZED STUDY PLAN</h3>
+        <div id="study-plan-list" class="list-container">
+          <!-- Dynamic study plans -->
+        </div>
+      </div>
+
+      <!-- Score progression log -->
+      <div class="section-container">
+        <h3>SCORE PROGRESSION LOG</h3>
+        <div id="progression-log-list" class="list-container">
+          <!-- Dynamic progression logs -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Practice Screen -->
+    <div id="screen-practice" class="screen">
+      <div class="practice-header">
+        <button id="btn-practice-back" class="neobrutalist-square-btn">
+          <span>◀</span>
+        </button>
+        <h2>Practice Room</h2>
+      </div>
+
+      <!-- Question Card -->
+      <div class="neobrutalist-card question-card">
+        <div class="practice-badges">
+          <span id="practice-category" class="category-badge pink-bg">Category</span>
+          <span id="practice-difficulty" class="category-badge teal-bg">Medium</span>
+        </div>
+        
+        <p id="practice-question-text" class="question-text">Loading adaptive question...</p>
+        
+        <div id="practice-options" class="options-container">
+          <!-- Dynamic options -->
+        </div>
+
+        <div id="explanation-container" class="neobrutalist-card explanation-card pink-bg hidden">
+          <h4>EXPLANATION</h4>
+          <p id="explanation-text">Explanation text here...</p>
+        </div>
+      </div>
+
+      <button id="btn-practice-submit" class="neobrutalist-btn teal-bg disabled" disabled>
+        SUBMIT ANSWER
+      </button>
+      <button id="btn-practice-next" class="neobrutalist-btn purple-bg hidden">
+        NEXT QUESTION
+      </button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
