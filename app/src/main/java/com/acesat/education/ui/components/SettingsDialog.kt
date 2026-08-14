@@ -46,12 +46,12 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text("BACKEND SERVER IP", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BorderBlack)
+                Text("BACKEND SERVER IP OR URL", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = BorderBlack)
                 Spacer(modifier = Modifier.height(4.dp))
                 OutlinedTextField(
                     value = ipText,
                     onValueChange = { ipText = it },
-                    placeholder = { Text("e.g. 192.168.0.104", color = Color.Gray) },
+                    placeholder = { Text("e.g. https://my-app.onrender.com", color = Color.Gray) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
                         focusedBorderColor = BorderBlack,

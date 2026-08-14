@@ -32,7 +32,13 @@ interface NvidiaService {
             // The backend holds the NVIDIA API key securely in its .env file.
             // The phone just talks to the backend over local Wi-Fi.
             val backendIp = settingsManager.getBackendIp() ?: "192.168.0.104"
-            val baseUrl = "http://$backendIp:3000/"
+            
+            // Support full production URLs (e.g. https://acesat-backend.onrender.com)
+            val baseUrl = if (backendIp.startsWith("http")) {
+                if (!backendIp.endsWith("/")) "$backendIp/" else backendIp
+            } else {
+                "http://$backendIp:3000/"
+            }
 
             val logging = HttpLoggingInterceptor().apply {
                 level = HttpLoggingInterceptor.Level.BASIC
