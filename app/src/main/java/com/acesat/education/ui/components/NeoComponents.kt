@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.acesat.education.ui.theme.*
 
 @Composable
-fun NeoBox(
+fun NeobrutalistBox(
     modifier: Modifier = Modifier,
     backgroundColor: Color = CardWhite,
     borderColor: Color = BorderBlack,
@@ -33,6 +33,7 @@ fun NeoBox(
         )
         Box(
             modifier = Modifier
+                .fillMaxWidth()
                 .background(backgroundColor, shape = RoundedCornerShape(cornerRadius.dp))
                 .border(borderWidth.dp, borderColor, shape = RoundedCornerShape(cornerRadius.dp))
                 .clip(RoundedCornerShape(cornerRadius.dp)),
@@ -42,7 +43,7 @@ fun NeoBox(
 }
 
 @Composable
-fun NeoButton(
+fun NeobrutalistButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     backgroundColor: Color = PurpleAccent,
@@ -50,7 +51,7 @@ fun NeoButton(
     content: @Composable RowScope.() -> Unit
 ) {
     val bg = if (enabled) backgroundColor else Color.Gray
-    NeoBox(
+    NeobrutalistBox(
         modifier = modifier.clickable(enabled = enabled) { onClick() },
         backgroundColor = bg,
         cornerRadius = 10,
