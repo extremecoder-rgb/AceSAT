@@ -59,10 +59,11 @@ class MainActivity : ComponentActivity() {
                     var currentScreen by remember { mutableStateOf<Screen>(Screen.Onboarding) }
                     var student by remember { mutableStateOf<Student?>(null) }
                     val context = LocalContext.current
+                    val scope = rememberCoroutineScope()
 
                     // Fetch student on start
                     LaunchedEffect(Unit) {
-                        lifecycleScope.launch {
+                        launch {
                             database.studentDao().getStudent().collect {
                                 student = it
                                 if (it != null) {
@@ -75,7 +76,7 @@ class MainActivity : ComponentActivity() {
                     when (currentScreen) {
                         is Screen.Onboarding -> OnboardingScreen(
                             onStartQuiz = { name, targetScore ->
-                                lifecycleScope.launch {
+                                scope.launch {
                                     val newStudent = Student(name = name, gradeLevel = "11th Grade", targetScore = targetScore)
                                     val id = withContext(Dispatchers.IO) {
                                         database.studentDao().insertStudent(newStudent)
@@ -88,7 +89,7 @@ class MainActivity : ComponentActivity() {
                         is Screen.DiagnosticQuiz -> DiagnosticQuizScreen(
                             studentId = student?.id ?: 0,
                             onQuizComplete = { scores ->
-                                lifecycleScope.launch {
+                                scope.launch {
                                     withContext(Dispatchers.IO) {
                                         agent.runDiagnosis(student?.id ?: 0, scores)
                                         agent.generateStudyPlan(student?.id ?: 0)
@@ -424,13 +425,13 @@ fun DashboardScreen(
     var scoreHistory by remember { mutableStateOf<List<Attempt>>(emptyList()) }
 
     LaunchedEffect(student.id) {
-        lifecycleScope {
+        launch {
             database.weakAreaDao().getWeakAreasFlow(student.id).collect { weakAreas = it }
         }
-        lifecycleScope {
+        launch {
             database.studyPlanDao().getStudyPlansFlow(student.id).collect { studyPlans = it }
         }
-        lifecycleScope {
+        launch {
             database.attemptDao().getAttemptsFlow(student.id).collect { scoreHistory = it }
         }
     }
@@ -655,13 +656,14 @@ fun PracticeScreen(
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
     var isSubmitted by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
 
     // Fetch next adaptive question
     fun loadNextQuestion() {
         isLoading = true
         selectedAnswer = null
         isSubmitted = false
-        lifecycleScope {
+        scope.launch {
             val q = withContext(Dispatchers.IO) {
                 agent.generateNextAdaptiveQuestion(studentId)
             }
@@ -821,7 +823,7 @@ fun PracticeScreen(
                     onClick = {
                         if (selectedAnswer != null) {
                             isSubmitted = true
-                            lifecycleScope {
+                            scope.launch {
                                 withContext(Dispatchers.IO) {
                                     agent.recordAttempt(studentId, q, selectedAnswer!!)
                                 }
@@ -846,15 +848,4 @@ fun PracticeScreen(
     }
 }
 
-// Extension to trigger coroutines from Composables using lifecycleScope
-@Composable
-fun rememberLifecycleScope(): kotlinx.coroutines.CoroutineScope {
-    val context = LocalContext.current
-    return (context as ComponentActivity).lifecycleScope
-}
 
-inline fun ComponentActivity.lifecycleScope(crossinline block: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) {
-    this.lifecycleScope.launch {
-        block()
-    }
-}

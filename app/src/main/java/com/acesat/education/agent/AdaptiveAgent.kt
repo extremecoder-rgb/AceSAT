@@ -123,10 +123,10 @@ class AdaptiveAgent(
             e.printStackTrace()
             // Return fallback steps if model fails
             val fallback = listOf(
-                StudyPlan(studentId, 1, "Master Linear Equations", "Review slope-intercept form and system of linear equations.", "Linear Equations", 30),
-                StudyPlan(studentId, 2, "Quadratic Foundations", "Practice factoring, quadratic formula, and graphing.", "Quadratic Equations", 45),
-                StudyPlan(studentId, 3, "Inference Strategies", "Learn to identify logical conclusions in Reading passages.", "Inference", 30),
-                StudyPlan(studentId, 4, "Grammar Rules Mastery", "Focus on punctuation, pronoun-antecedent agreement, and verb tense.", "Grammar & Punctuation", 30)
+                StudyPlan(studentId = studentId, stepOrder = 1, title = "Master Linear Equations", description = "Review slope-intercept form and system of linear equations.", category = "Linear Equations", estimatedMinutes = 30),
+                StudyPlan(studentId = studentId, stepOrder = 2, title = "Quadratic Foundations", description = "Practice factoring, quadratic formula, and graphing.", category = "Quadratic Equations", estimatedMinutes = 45),
+                StudyPlan(studentId = studentId, stepOrder = 3, title = "Inference Strategies", description = "Learn to identify logical conclusions in Reading passages.", category = "Inference", estimatedMinutes = 30),
+                StudyPlan(studentId = studentId, stepOrder = 4, title = "Grammar Rules Mastery", description = "Focus on punctuation, pronoun-antecedent agreement, and verb tense.", category = "Grammar & Punctuation", estimatedMinutes = 30)
             )
             studyPlanDao.deleteStudyPlan(studentId)
             studyPlanDao.insertStudyPlanSteps(fallback)
