@@ -13,7 +13,7 @@ import com.acesat.education.data.SettingsManager
 data class Message(val role: String, val content: String)
 
 data class ChatRequest(
-    val model: String = "meta/llama-3.1-70b-instruct",
+    val model: String = "meta/llama-3.1-8b-instruct",
     val messages: List<Message>,
     val temperature: Double = 0.2,
     val top_p: Double = 0.7,
