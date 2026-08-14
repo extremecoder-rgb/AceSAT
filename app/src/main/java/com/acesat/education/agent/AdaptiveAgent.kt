@@ -80,7 +80,7 @@ Output ONLY a valid JSON array. No markdown, no code blocks, no extra text.
                         Message("user", userPrompt)
                     ),
                     temperature = 0.8,
-                    max_tokens = 8000
+                    max_tokens = 4096
                 )
             )
 
@@ -179,7 +179,7 @@ Output ONLY a valid JSON array. No markdown, no code blocks.
                         Message("user", userPrompt)
                     ),
                     temperature = 0.7,
-                    max_tokens = 4000
+                    max_tokens = 2048
                 )
             )
 
@@ -289,7 +289,7 @@ Output ONLY raw JSON. No markdown code blocks.
                         Message("user", userPrompt)
                     ),
                     temperature = 0.9,
-                    max_tokens = 4000
+                    max_tokens = 2048
                 )
             )
 
