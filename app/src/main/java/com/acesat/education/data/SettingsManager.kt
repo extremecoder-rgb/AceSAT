@@ -8,6 +8,6 @@ class SettingsManager(context: Context) {
         context.getSharedPreferences("acesat_settings", Context.MODE_PRIVATE)
 
     // Backend IP for the production Node.js proxy server
-    fun getBackendIp(): String? = prefs.getString("backend_ip", "https://acesat-backend.onrender.com")
+    fun getBackendIp(): String? = prefs.getString("backend_ip", "https://ace-sat.vercel.app/")
     fun setBackendIp(ip: String) = prefs.edit().putString("backend_ip", ip).apply()
 }
