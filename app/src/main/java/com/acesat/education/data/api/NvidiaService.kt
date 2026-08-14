@@ -16,9 +16,9 @@ data class Message(
 data class ChatRequest(
     val model: String = "nvidia/nemotron-3-super-120b-a12b",
     val messages: List<Message>,
-    val temperature: Double = 0.7,
-    val top_p: Double = 0.9,
-    val max_tokens: Int = 4000
+    val temperature: Double = 0.8,
+    val top_p: Double = 0.95,
+    val max_tokens: Int = 8000
 )
 
 data class ChatResponse(
@@ -34,17 +34,19 @@ interface NvidiaService {
     suspend fun getCompletions(@Body request: ChatRequest): ChatResponse
 
     companion object {
-        private const val BASE_URL = "http://10.180.70.162:3000/" // Local Wi-Fi IP for physical device testing
+        // Change this to your backend URL (local IP for phone, or deployed URL)
+        private const val BASE_URL = "http://10.180.70.162:3000/"
 
         fun create(): NvidiaService {
             val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
+                level = HttpLoggingInterceptor.Level.BASIC
             }
 
             val client = OkHttpClient.Builder()
                 .addInterceptor(logging)
-                .connectTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
+                .connectTimeout(120, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .writeTimeout(120, TimeUnit.SECONDS)
                 .build()
 
             return Retrofit.Builder()

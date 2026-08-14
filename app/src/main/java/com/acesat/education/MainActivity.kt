@@ -17,15 +17,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.lifecycleScope
 import com.acesat.education.agent.AdaptiveAgent
 import com.acesat.education.agent.GeneratedQuestionDto
+import com.acesat.education.agent.DiagnosticResult
 import com.acesat.education.data.api.NvidiaService
 import com.acesat.education.data.room.*
 import com.acesat.education.ui.theme.*
@@ -38,7 +37,7 @@ sealed class Screen {
     object Onboarding : Screen()
     object DiagnosticQuiz : Screen()
     object Dashboard : Screen()
-    object Practice : Screen()
+    data class Practice(val category: String? = null, val section: String? = null) : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -73,42 +72,51 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    when (currentScreen) {
+                    when (val screen = currentScreen) {
                         is Screen.Onboarding -> OnboardingScreen(
-                            onStartQuiz = { name, targetScore ->
+                            onStart = { name, targetScore ->
                                 scope.launch {
                                     val newStudent = Student(name = name, gradeLevel = "11th Grade", targetScore = targetScore)
                                     val id = withContext(Dispatchers.IO) {
                                         database.studentDao().insertStudent(newStudent)
                                     }
                                     student = newStudent.copy(id = id.toInt())
-                                    currentScreen = Screen.DiagnosticQuiz
+                                    // Go directly to Dashboard first!
+                                    currentScreen = Screen.Dashboard
                                 }
                             }
                         )
                         is Screen.DiagnosticQuiz -> DiagnosticQuizScreen(
                             studentId = student?.id ?: 0,
-                            onQuizComplete = { scores ->
+                            agent = agent,
+                            onQuizComplete = { mathScore, rwScore, results ->
                                 scope.launch {
                                     withContext(Dispatchers.IO) {
-                                        agent.runDiagnosis(student?.id ?: 0, scores)
+                                        agent.runDiagnosis(student?.id ?: 0, mapOf("Math" to mathScore, "Reading & Writing" to rwScore))
+                                        agent.saveDiagnosticWeakAreas(student?.id ?: 0, results)
                                         agent.generateStudyPlan(student?.id ?: 0)
                                     }
-                                    Toast.makeText(context, "Diagnosis complete! Study plan generated.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "AI Diagnostic evaluation complete!", Toast.LENGTH_SHORT).show()
                                     currentScreen = Screen.Dashboard
                                 }
-                            }
+                            },
+                            onBack = { currentScreen = Screen.Dashboard }
                         )
                         is Screen.Dashboard -> DashboardScreen(
                             student = student!!,
                             database = database,
                             agent = agent,
-                            onStartPractice = {
-                                currentScreen = Screen.Practice
+                            onStartPractice = { cat, sec ->
+                                currentScreen = Screen.Practice(cat, sec)
+                            },
+                            onStartDiagnostic = {
+                                currentScreen = Screen.DiagnosticQuiz
                             }
                         )
                         is Screen.Practice -> PracticeScreen(
                             studentId = student?.id ?: 0,
+                            selectedCategory = screen.category,
+                            selectedSection = screen.section,
                             agent = agent,
                             database = database,
                             onBackToDashboard = {
@@ -122,7 +130,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// Custom Neobrutalist Container with border and drop shadow
+// Neobrutalist UI Card with shadow fix
 @Composable
 fun NeobrutalistBox(
     modifier: Modifier = Modifier,
@@ -135,16 +143,15 @@ fun NeobrutalistBox(
     content: @Composable BoxScope.() -> Unit
 ) {
     Box(modifier = modifier.padding(bottom = shadowOffset.dp, end = shadowOffset.dp)) {
-        // Shadow layer
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .offset(x = shadowOffset.dp, y = shadowOffset.dp)
                 .background(shadowColor, shape = RoundedCornerShape(cornerRadius.dp))
         )
-        // Foreground layer
         Box(
             modifier = Modifier
+                .fillMaxWidth() // Fixes the background/shadow alignment issue
                 .background(backgroundColor, shape = RoundedCornerShape(cornerRadius.dp))
                 .border(borderWidth.dp, borderColor, shape = RoundedCornerShape(cornerRadius.dp))
                 .clip(RoundedCornerShape(cornerRadius.dp)),
@@ -179,7 +186,7 @@ fun NeobrutalistButton(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OnboardingScreen(onStartQuiz: (String, Int) -> Unit) {
+fun OnboardingScreen(onStart: (String, Int) -> Unit) {
     var name by remember { mutableStateOf("") }
     var targetScoreText by remember { mutableStateOf("1400") }
 
@@ -256,52 +263,52 @@ fun OnboardingScreen(onStartQuiz: (String, Int) -> Unit) {
             onClick = {
                 val target = targetScoreText.toIntOrNull() ?: 1200
                 if (name.isNotBlank()) {
-                    onStartQuiz(name, target)
+                    onStart(name, target)
                 }
             },
             backgroundColor = PurpleAccent
         ) {
-            Text("START DIAGNOSTIC QUIZ", fontWeight = FontWeight.ExtraBold, color = CardWhite)
+            Text("ENTER DASHBOARD", fontWeight = FontWeight.ExtraBold, color = CardWhite)
         }
     }
 }
 
 @Composable
-fun DiagnosticQuizScreen(studentId: Int, onQuizComplete: (Map<String, Int>) -> Unit) {
+fun DiagnosticQuizScreen(
+    studentId: Int,
+    agent: AdaptiveAgent,
+    onQuizComplete: (mathScore: Int, rwScore: Int, results: List<DiagnosticResult>) -> Unit,
+    onBack: () -> Unit
+) {
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val quizQuestions = remember { mutableStateListOf<GeneratedQuestionDto>() }
     var currentQuestionIdx by remember { mutableStateOf(0) }
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
-    val answers = remember { mutableStateListOf<Boolean>() }
+    val userAnswers = remember { mutableStateListOf<DiagnosticResult>() }
+    val scope = rememberCoroutineScope()
 
-    val quizQuestions = listOf(
-        DiagnosticQuestion(
-            section = "Math",
-            category = "Linear Equations",
-            text = "If 3x - 4 = 11, what is the value of 2x + 5?",
-            options = mapOf("A" to "10", "B" to "15", "C" to "12", "D" to "13"),
-            correctAnswer = "B"
-        ),
-        DiagnosticQuestion(
-            section = "Math",
-            category = "Quadratic Equations",
-            text = "For which of the following values of x is the equation x^2 - 5x + 6 = 0 true?",
-            options = mapOf("A" to "1", "B" to "4", "C" to "3", "D" to "5"),
-            correctAnswer = "C"
-        ),
-        DiagnosticQuestion(
-            section = "Reading & Writing",
-            category = "Inference",
-            text = "A study shows that students who read fiction score higher on vocabulary tests. What is the most logical inference from this finding?",
-            options = mapOf(
-                "A" to "Reading fiction directly increases vocabulary size.",
-                "B" to "There is a positive correlation between reading fiction and vocabulary strength.",
-                "C" to "Fiction readers are generally better at math.",
-                "D" to "Non-fiction has no impact on vocabulary development."
-            ),
-            correctAnswer = "B"
-        )
-    )
+    fun loadQuiz() {
+        isLoading = true
+        errorMessage = null
+        scope.launch {
+            try {
+                val mathQs = withContext(Dispatchers.IO) { agent.generateDiagnosticQuiz("Math") }
+                val rwQs = withContext(Dispatchers.IO) { agent.generateDiagnosticQuiz("Reading & Writing") }
+                quizQuestions.clear()
+                quizQuestions.addAll(mathQs + rwQs)
+                isLoading = false
+            } catch (e: Exception) {
+                e.printStackTrace()
+                errorMessage = "Failed to generate AI Diagnostic Quiz. Make sure your local Node proxy is running and configured with your NVIDIA API key."
+                isLoading = false
+            }
+        }
+    }
 
-    val currentQuestion = quizQuestions[currentQuestionIdx]
+    LaunchedEffect(Unit) {
+        loadQuiz()
+    }
 
     Column(
         modifier = Modifier
@@ -309,116 +316,161 @@ fun DiagnosticQuizScreen(studentId: Int, onQuizComplete: (Map<String, Int>) -> U
             .background(BackgroundCream)
             .padding(24.dp)
     ) {
-        Text(
-            text = "Diagnostic Quiz (${currentQuestionIdx + 1}/${quizQuestions.size})",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Question Card
-        NeobrutalistBox(
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            backgroundColor = CardWhite
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .verticalScroll(rememberScrollState())
+            NeobrutalistBox(
+                modifier = Modifier.clickable { onBack() }.size(40.dp),
+                cornerRadius = 6,
+                shadowOffset = 2
             ) {
-                Text(
-                    text = currentQuestion.section.uppercase(),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TealAccent
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    modifier = Modifier.align(Alignment.Center)
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = currentQuestion.text,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    lineHeight = 24.sp
-                )
-                Spacer(modifier = Modifier.height(24.dp))
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Text("AI Diagnostic", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+        }
 
-                currentQuestion.options.forEach { (key, value) ->
-                    val isSelected = selectedAnswer == key
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp)
-                            .background(
-                                if (isSelected) PurpleAccent else CardWhite,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .border(
-                                2.dp,
-                                BorderBlack,
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .clickable { selectedAnswer = key }
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = "$key. $value",
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isSelected) CardWhite else BorderBlack
-                        )
+        if (isLoading) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = PurpleAccent)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "NVIDIA NIM is writing authentic SAT questions...",
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        } else if (errorMessage != null) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(errorMessage!!, textAlign = TextAlign.Center, color = Color.Red, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    NeobrutalistButton(onClick = { loadQuiz() }, backgroundColor = TealAccent) {
+                        Text("RETRY", color = CardWhite, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-        }
+        } else if (quizQuestions.isNotEmpty()) {
+            val currentQuestion = quizQuestions[currentQuestionIdx]
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "Question ${currentQuestionIdx + 1} of ${quizQuestions.size}",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
 
-        NeobrutalistButton(
-            onClick = {
-                if (selectedAnswer != null) {
-                    val isCorrect = selectedAnswer == currentQuestion.correctAnswer
-                    answers.add(isCorrect)
-                    selectedAnswer = null
+            NeobrutalistBox(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                backgroundColor = CardWhite
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(20.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = "${currentQuestion.section.uppercase()} — ${currentQuestion.category.uppercase()}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TealAccent
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = currentQuestion.question,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 22.sp
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                    if (currentQuestionIdx < quizQuestions.size - 1) {
-                        currentQuestionIdx++
-                    } else {
-                        // Diagnostic quiz completed, compile scores
-                        var mathScore = 400
-                        var rwScore = 400
-                        
-                        // Simple score mapping
-                        if (answers[0]) mathScore += 100
-                        if (answers[1]) mathScore += 100
-                        if (answers[2]) rwScore += 200
-
-                        onQuizComplete(mapOf("Math" to mathScore, "Reading & Writing" to rwScore))
+                    currentQuestion.options.forEach { (key, value) ->
+                        val isSelected = selectedAnswer == key
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                                .background(if (isSelected) PurpleAccent else CardWhite, shape = RoundedCornerShape(8.dp))
+                                .border(2.dp, BorderBlack, shape = RoundedCornerShape(8.dp))
+                                .clickable { selectedAnswer = key }
+                                .padding(16.dp)
+                        ) {
+                            Text(
+                                text = "$key. $value",
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (isSelected) CardWhite else BorderBlack
+                            )
+                        }
                     }
                 }
-            },
-            backgroundColor = TealAccent
-        ) {
-            Text(
-                text = if (currentQuestionIdx == quizQuestions.size - 1) "FINISH ASSESSMENT" else "NEXT QUESTION",
-                fontWeight = FontWeight.ExtraBold,
-                color = CardWhite
-            )
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            NeobrutalistButton(
+                onClick = {
+                    if (selectedAnswer != null) {
+                        val isCorrect = selectedAnswer == currentQuestion.correctAnswer
+                        userAnswers.add(
+                            DiagnosticResult(
+                                category = currentQuestion.category,
+                                section = currentQuestion.section,
+                                isCorrect = isCorrect
+                            )
+                        )
+                        selectedAnswer = null
+
+                        if (currentQuestionIdx < quizQuestions.size - 1) {
+                            currentQuestionIdx++
+                        } else {
+                            // Calculate scores
+                            val mathQuestions = userAnswers.filter { it.section == "Math" }
+                            val rwQuestions = userAnswers.filter { it.section == "Reading & Writing" }
+
+                            val mathCorrectCount = mathQuestions.count { it.isCorrect }
+                            val rwCorrectCount = rwQuestions.count { it.isCorrect }
+
+                            // Map correct ratio to 200-800 scale
+                            val mathScore = 200 + ((mathCorrectCount.toFloat() / mathQuestions.size) * 600).toInt()
+                            val rwScore = 200 + ((rwCorrectCount.toFloat() / rwQuestions.size) * 600).toInt()
+
+                            onQuizComplete(mathScore, rwScore, userAnswers.toList())
+                        }
+                    }
+                },
+                backgroundColor = TealAccent
+            ) {
+                Text(
+                    text = if (currentQuestionIdx == quizQuestions.size - 1) "FINISH ASSESSMENT" else "NEXT QUESTION",
+                    fontWeight = FontWeight.ExtraBold,
+                    color = CardWhite
+                )
+            }
         }
     }
 }
-
-data class DiagnosticQuestion(
-    val section: String,
-    val category: String,
-    val text: String,
-    val options: Map<String, String>,
-    val correctAnswer: String
-)
 
 @Composable
 fun DashboardScreen(
     student: Student,
     database: AppDatabase,
     agent: AdaptiveAgent,
-    onStartPractice: () -> Unit
+    onStartPractice: (category: String?, section: String?) -> Unit,
+    onStartDiagnostic: () -> Unit
 ) {
     var weakAreas by remember { mutableStateOf<List<WeakArea>>(emptyList()) }
     var studyPlans by remember { mutableStateOf<List<StudyPlan>>(emptyList()) }
@@ -476,37 +528,112 @@ fun DashboardScreen(
 
         // Grid scores
         Row(modifier = Modifier.fillMaxWidth()) {
+            // First item
             NeobrutalistBox(
                 modifier = Modifier.weight(1f),
                 backgroundColor = CardWhite
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
                     Text("MATH", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PurpleAccent)
-                    Text("${student.mathScore}/800", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("${student.mathScore}/800", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
             Spacer(modifier = Modifier.width(12.dp))
+            // Second item
             NeobrutalistBox(
                 modifier = Modifier.weight(1f),
                 backgroundColor = CardWhite
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
                     Text("READING & WRITING", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TealAccent)
-                    Text("${student.readingWritingScore}/800", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("${student.readingWritingScore}/800", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Start Adaptive Practice Button
-        NeobrutalistButton(
-            onClick = onStartPractice,
-            backgroundColor = PurpleAccent
-        ) {
-            Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = CardWhite)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("START ADAPTIVE PRACTICE", fontWeight = FontWeight.ExtraBold, color = CardWhite)
+        if (student.diagnosticScore == 0) {
+            // Un-diagnosed Prompt
+            NeobrutalistBox(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = CardWhite
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("TAKE AI DIAGNOSTIC ASSESSMENT", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Let NVIDIA NIM generate a diagnostic test to identify your specific SAT strengths and weaknesses.",
+                        fontSize = 13.sp,
+                        color = Color.DarkGray
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    NeobrutalistButton(onClick = onStartDiagnostic, backgroundColor = PurpleAccent) {
+                        Text("START AI DIAGNOSTIC", fontWeight = FontWeight.Bold, color = CardWhite)
+                    }
+                }
+            }
+        } else {
+            // Practice Picker
+            NeobrutalistBox(
+                modifier = Modifier.fillMaxWidth(),
+                backgroundColor = CardWhite
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("START SAT PRACTICE", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Adaptive button
+                    NeobrutalistButton(
+                        onClick = { onStartPractice(null, null) },
+                        backgroundColor = PurpleAccent
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = CardWhite)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("ADAPTIVE PRACTICE (AI DECIDES)", fontWeight = FontWeight.Bold, color = CardWhite)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("PRACTICE SPECIFIC DOMAINS:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Math domain buttons
+                    Text("Math Domains", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AdaptiveAgent.SAT_MATH_CATEGORIES.forEach { (cat, _) ->
+                        Text(
+                            text = cat,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onStartPractice(cat, "Math") }
+                                .padding(vertical = 8.dp),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PurpleAccent
+                        )
+                        Divider()
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // R&W domain buttons
+                    Text("Reading & Writing Domains", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AdaptiveAgent.SAT_RW_CATEGORIES.forEach { (cat, _) ->
+                        Text(
+                            text = cat,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onStartPractice(cat, "Reading & Writing") }
+                                .padding(vertical = 8.dp),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = TealAccent
+                        )
+                        Divider()
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -515,19 +642,15 @@ fun DashboardScreen(
         Text("WEAK AREAS & PROFICIENCY", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(modifier = Modifier.height(8.dp))
         if (weakAreas.isEmpty()) {
-            Text("No weak areas identified. Good job!", fontSize = 14.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            Text("No weak areas identified. Take the AI Diagnostic or start practicing!", fontSize = 13.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
         } else {
             weakAreas.forEach { wa ->
                 NeobrutalistBox(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     backgroundColor = CardWhite
                 ) {
                     Row(
-                        modifier = Modifier
-                            .padding(12.dp)
-                            .fillMaxWidth(),
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -550,13 +673,11 @@ fun DashboardScreen(
         Text("AI PERSONALIZED STUDY PLAN", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(modifier = Modifier.height(8.dp))
         if (studyPlans.isEmpty()) {
-            Text("Analyzing diagnostic and generating study steps...", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            Text("Complete the diagnostic assessment to unlock your personalized plan.", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 13.sp)
         } else {
             studyPlans.forEach { step ->
                 NeobrutalistBox(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     backgroundColor = if (step.isCompleted) TealAccent else CardWhite
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -591,7 +712,7 @@ fun DashboardScreen(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Estimated: ${step.estimatedMinutes} mins",
+                            text = "Estimated: ${step.estimatedMinutes} mins | Focus: ${step.category}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (step.isCompleted) CardWhite else TealAccent
@@ -607,19 +728,15 @@ fun DashboardScreen(
         Text("SCORE PROGRESSION LOG", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(modifier = Modifier.height(8.dp))
         if (scoreHistory.isEmpty()) {
-            Text("Start practicing to see your attempt progression.", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
+            Text("Start practicing to log attempt history.", fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 13.sp)
         } else {
             scoreHistory.take(5).forEach { attempt ->
                 NeobrutalistBox(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     backgroundColor = CardWhite
                 ) {
                     Row(
-                        modifier = Modifier
-                            .padding(12.dp)
-                            .fillMaxWidth(),
+                        modifier = Modifier.padding(12.dp).fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -648,6 +765,8 @@ fun DashboardScreen(
 @Composable
 fun PracticeScreen(
     studentId: Int,
+    selectedCategory: String?,
+    selectedSection: String?,
     agent: AdaptiveAgent,
     database: AppDatabase,
     onBackToDashboard: () -> Unit
@@ -656,19 +775,26 @@ fun PracticeScreen(
     var selectedAnswer by remember { mutableStateOf<String?>(null) }
     var isSubmitted by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    // Fetch next adaptive question
     fun loadNextQuestion() {
         isLoading = true
+        errorMessage = null
         selectedAnswer = null
         isSubmitted = false
         scope.launch {
-            val q = withContext(Dispatchers.IO) {
-                agent.generateNextAdaptiveQuestion(studentId)
+            try {
+                val q = withContext(Dispatchers.IO) {
+                    agent.generateNextAdaptiveQuestion(studentId, selectedCategory, selectedSection)
+                }
+                currentQuestion = q
+                isLoading = false
+            } catch (e: Exception) {
+                e.printStackTrace()
+                errorMessage = "Failed to fetch question from NVIDIA NIM. Check your server proxy connection."
+                isLoading = false
             }
-            currentQuestion = q
-            isLoading = false
         }
     }
 
@@ -684,15 +810,11 @@ fun PracticeScreen(
     ) {
         // Top Nav
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             NeobrutalistBox(
-                modifier = Modifier
-                    .clickable { onBackToDashboard() }
-                    .size(40.dp),
+                modifier = Modifier.clickable { onBackToDashboard() }.size(40.dp),
                 cornerRadius = 6,
                 shadowOffset = 2
             ) {
@@ -703,15 +825,36 @@ fun PracticeScreen(
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
-            Text("Practice Room", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
+            Text(
+                text = if (selectedCategory != null) "Focus: $selectedCategory" else "Adaptive Practice",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.ExtraBold
+            )
         }
 
         if (isLoading) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                CircularProgressIndicator(
+                Column(
                     modifier = Modifier.align(Alignment.Center),
-                    color = PurpleAccent
-                )
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = PurpleAccent)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Fetching fresh SAT practice...", fontWeight = FontWeight.Bold)
+                }
+            }
+        } else if (errorMessage != null) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(errorMessage!!, textAlign = TextAlign.Center, color = Color.Red, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    NeobrutalistButton(onClick = { loadNextQuestion() }, backgroundColor = PurpleAccent) {
+                        Text("RETRY", color = CardWhite, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         } else if (currentQuestion != null) {
             val q = currentQuestion!!
@@ -764,9 +907,9 @@ fun PracticeScreen(
 
                     Text(
                         text = q.question,
-                        fontSize = 17.sp,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        lineHeight = 24.sp
+                        lineHeight = 22.sp
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -847,5 +990,3 @@ fun PracticeScreen(
         }
     }
 }
-
-
